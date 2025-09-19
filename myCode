@@ -1,0 +1,118 @@
+// Utility function to wait for an element with a timeout
+function waitForElementWithTimeout(selector, timeout, interval = 100) {
+  return new Promise((resolve, reject) => {
+    let timer = setTimeout(() => {
+      clearInterval(checker);
+      // Use a more specific error message based on the selector
+      reject(new Error(`Timed out waiting for element with selector: '${selector}'`));
+    }, timeout);
+
+    const checker = setInterval(() => {
+      const element = document.querySelector(selector);
+      if (element) {
+        clearTimeout(timer);
+        clearInterval(checker);
+        resolve(element);
+      }
+    }, interval);
+  });
+}
+
+// Main function to skip content using async/await
+async function skipVideos() {
+  const timeout = 5000; // 5 seconds
+  const interval = 200; // Check every 200ms
+
+  // First, check for any "Continue" button
+  const autoContinueNextLecture = document.querySelector('[data-purpose="go-to-next-button"]');
+  if (autoContinueNextLecture) {
+    console.log('Auto-continue button found. Clicking to proceed...');
+    autoContinueNextLecture.click();
+    return;
+  }
+
+  console.log('Attempting to find video...');
+
+  try {
+    // Wait for the video element to appear
+    const videoElement = await waitForElementWithTimeout('video', timeout, interval);
+
+    console.log('Video element found. Skipping...');
+
+    // A more reliable way to pause, check if the video is currently playing
+    if (!videoElement.paused) {
+      videoElement.pause();
+    }
+
+    // Handle videos that might not have a duration (e.g., streaming videos)
+    const durationOfVideo = videoElement.duration;
+    if (isFinite(durationOfVideo) && durationOfVideo > 3) {
+      // Skip to the last 3 seconds
+      videoElement.currentTime = durationOfVideo - 3;
+    } else {
+      // If duration is not available or too short, set to a low value to trigger completion
+      videoElement.currentTime = 0; // The `loadedmetadata` event would trigger seeking to duration if needed
+    }
+
+    // Play the video to trigger the "video complete" event
+    videoElement.play();
+
+  } catch (videoError) {
+    // If no video is found after the timeout, check for other content types
+    console.warn(videoError.message);
+    console.log('No video found. Checking for quizzes or articles...');
+
+    // Handle articles/lectures
+    const skiplLectureButton = document.querySelector('#go-to-next-item');
+    if (skiplLectureButton) {
+      console.log('Article/lecture button found. Clicking to skip.');
+      skiplLectureButton.click();
+      return;
+    }
+
+    // Handle quizzes
+    const skipQuizButton = document.querySelector('[data-purpose="go-to-next"]');
+    if (skipQuizButton) {
+      console.log('Quiz button found. Clicking to skip.');
+      skipQuizButton.click();
+      return;
+    }
+    
+    // Fallback to the general "continue" button if others are not found
+    const fallbackContinueButton = document.querySelector('[data-purpose="go-to-next-button"]');
+    if (fallbackContinueButton) {
+      console.log('Falling back to general continue button...');
+      fallbackContinueButton.click();
+    }
+
+    console.log('No video, quiz, or lecture found. Skipping logic complete.');
+  }
+}
+
+for (let i = 0; i < 100; i++) {
+try {
+  await skipVideos();
+} catch (error) {
+  
+}
+  
+}
+
+async function runSequentialSkip() {
+  for (let i = 0; i < 100; i++) {
+    try {
+      console.log(`--- Starting iteration ${i + 1} ---`);
+      // The `await` here is the crucial change.
+      // It pauses the loop until the skipVideos() Promise settles.
+      await skipVideos();
+      console.log(`--- Finished iteration ${i + 1} ---`);
+    } catch (error) {
+      console.error(`An error occurred in iteration ${i + 1}:`, error);
+    }
+    // Add a short delay to give the page time to load the next content.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
+
+// Call the new async function to begin the process.
+runSequentialSkip();
